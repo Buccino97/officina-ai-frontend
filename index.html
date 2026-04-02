@@ -718,6 +718,19 @@ body{font-family:'Roboto',sans-serif;background:#2a2a2a;display:flex;flex-direct
   <!-- ░░ MANAGE PAGE ░░ -->
   <div class="page" id="page-manage">
     <div class="ph"><h2>📊 ALLDATA MANAGE — Gestionale Officina</h2><div class="vb">Sistema attivo</div></div>
+    <div class="ibox" style="margin:12px 16px;padding:12px;background:#fff;border:1px solid #ddd;border-radius:6px;">
+      <h4 style="margin-bottom:8px;font-size:12px;color:#1a3a6a;">🤖 Officina AI - Diagnostica Automatica</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input id="llmVehicleId" placeholder="Vehicle ID (es. 1001)" style="padding:8px;border:1px solid #ccc;border-radius:4px;font-size:11px;"/>
+        <input id="llmCodes" placeholder="DTC codes (P0300,P0420)" style="padding:8px;border:1px solid #ccc;border-radius:4px;font-size:11px;"/>
+      </div>
+      <textarea id="llmSymptoms" placeholder="Sintomi rilevati..." rows="2" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:11px;margin-bottom:8px;"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-sm primary" onclick="runLLMDiagnosis()">🔍 Avvia Diagnosi LLM</button>
+        <button class="btn-sm" onclick="autoWorkOrder()">🧾 Crea Work Order Automatico</button>
+      </div>
+      <div id="llm-report" style="margin-top:10px;padding:10px;background:#f8f8f8;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#333;min-height:40px;">Risultato diagnostica qui</div>
+    </div>
     <div class="manage-tabs">
       <div class="m-tab active" id="mt-wo" onclick="setManageTab('wo')">📋 Ordini di Lavoro</div>
       <div class="m-tab" id="mt-clients" onclick="setManageTab('clients')">👤 Clienti</div>
@@ -2282,16 +2295,35 @@ function el(id){return document.getElementById(id);}
 // Funzioni essenziali per diagnostica/workorder come gia costruite precedentemente
 async function runLLMDiagnosis(){
   const id=el('llmVehicleId').value; const codes=el('llmCodes').value.split(',').map(c=>c.trim()).filter(Boolean); const symptoms=el('llmSymptoms').value;
-  if(!id||!codes.length){alert('Inserisci vehicle_id e DTC'); return;}
-  const res=await fetch(`${API}/diagnostics/llm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle_id:parseInt(id),dtc_codes:codes,symptoms})});
-  const data=await res.json(); alert('Diagnostic report:\n'+JSON.stringify(data,null,2));
+  if(!id||!codes.length){showToast('Inserisci vehicle_id e codici DTC','warn'); return;}
+  const report = el('llm-report');
+  report.textContent = '⏳ Elaborazione in corso...';
+  try {
+    const res=await fetch(`${API}/diagnostics/llm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle_id:parseInt(id),dtc_codes:codes,symptoms})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    report.textContent = JSON.stringify(data, null, 2);
+    showToast('✅ Diagnosi LLM completata','success');
+  } catch (err) {
+    report.textContent = 'Errore diagnostica: '+err.message;
+    showToast('❌ Errore diagnostica LLM','error');
+  }
 }
 
 async function autoWorkOrder(){
   const id=el('llmVehicleId').value; const codes=el('llmCodes').value.split(',').map(c=>c.trim()).filter(Boolean);
-  if(!id||!codes.length){alert('Inserisci vehicle_id e DTC'); return;}
-  const res=await fetch(`${API}/work_orders/auto_generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle_id:parseInt(id),dtc_codes:codes})});
-  const data=await res.json(); alert('Work Order creato ID: '+data.work_order_id); }
+  if(!id||!codes.length){showToast('Inserisci vehicle_id e codici DTC','warn'); return;}
+  try {
+    const res=await fetch(`${API}/work_orders/auto_generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vehicle_id:parseInt(id),dtc_codes:codes})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    el('llm-report').textContent = 'Work Order creato ID: '+(data.work_order_id||'n/a');
+    showToast('✅ Work Order creato','success');
+  } catch (err) {
+    el('llm-report').textContent = 'Errore creazione WO: '+err.message;
+    showToast('❌ Errore creazione WO','error');
+  }
+}
 
 // Map function alias su ensure default element id per ALLDATA template:
 window.runLLMDiagnosis=runLLMDiagnosis;

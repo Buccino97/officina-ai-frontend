@@ -2278,12 +2278,38 @@ function showToast(msg, type = '') {
   toastTimer = setTimeout(() => t.style.display = 'none', 3000);
 }
 
+// ═══════════════════════════ PAGE SWITCH ═══════════════════════════
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+  const p = document.getElementById('page-' + pageId);
+  if (p) p.classList.add('active');
+  // sidebar active state
+  document.querySelectorAll('#sidebar .ni').forEach(item => item.classList.remove('active'));
+  const side = document.querySelector(`#sidebar .ni[data-page='${pageId}']`);
+  if (side) side.classList.add('active');
+  // status bar
+  const pageNames = {
+    home: 'Home',
+    dtc: 'Scanner DTC/OBD',
+    diagram: 'Schemi Elettrici',
+    tsb: 'Bollettini TSB',
+    maint: 'Manutenzione',
+    parts: 'Ricambi',
+    manage: 'Gestionale',
+    procedure: 'Procedura',
+  };
+  const label = pageNames[pageId] || pageId;
+  const sb = document.getElementById('sb-page');
+  if (sb) sb.textContent = label;
+}
+
 // ══ Init renders ══
 renderDtcList();
 renderTsb();
 renderParts();
 renderMaint();
 renderManage();
+showPage('home');
 </script>
 
 <!-- Fallback Officina AI floating panel (sempre visibile) -->

@@ -1,0 +1,352 @@
+<section>
+<h2>AI Diagnosi Avanzata</h2>
+<label>Vehicle ID <input id="llmVehicleId" type="number" value="1"></label>
+<label>DTC (comma)</label>
+<input id="llmCodes" placeholder="P0100,P0171">
+<label>Sintomi <input id="llmSymptoms" placeholder="es. motore irregolare"></label>
+<button onclick="runLLMDiagnosis()">Diagnosi LLM</button>
+<button onclick="autoWorkOrder()">Genera Work Order</button>
+</section>
+
+<section class="details">
+<h3>Risultato LLM</h3>
+<pre id="llmResult">---</pre>
+</section>
+
+<section>
+<h2>Work Orders</h2>
+<label>WO ID <input id="woId" type="number"></label>
+<button onclick="loadWO()">Carica WO</button>
+<div id="woDetails"></div>
+</section>
+async function runLLMDiagnosis(){
+  const id = el('llmVehicleId').value;
+  const codes = el('llmCodes').value.split(',').map(c=>c.trim()).filter(Boolean);
+  const symptoms = el('llmSymptoms').value;
+  if(!id || !codes.length){el('llmResult').innerText="Inserisci vehicle_id e DTC"; return;}
+  const res = await fetch(`${API}/diagnostics/llm`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({vehicle_id: parseInt(id), dtc_codes: codes, symptoms})
+  });
+  const data = await res.json();
+  el('llmResult').innerText = data.diagnosis;
+}
+
+async function autoWorkOrder(){
+  const id = el('llmVehicleId').value;
+  const codes = el('llmCodes').value.split(',').map(c=>c.trim()).filter(Boolean);
+  if(!id || !codes.length){alert("Inserisci vehicle_id e DTC"); return;}
+  const res = await fetch(`${API}/work_orders/auto_generate`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({vehicle_id: parseInt(id), dtc_codes: codes})
+  });
+  const data = await res.json();
+  alert(`Work Order creato: ID ${data.work_order_id}`);
+  loadWO(data.work_order_id);
+}
+
+async function loadWO(woId){
+  const id = woId || el('woId').value;
+  if(!id){el('woDetails').innerHTML=""; return;}
+  const res = await fetch(`${API}/work_orders/${id}/details`);
+  const data = await res.json();
+  el('woDetails').innerHTML = `
+    <h3>Work Order ${data.work_order.id}</h3>
+    <p>${data.work_order.title}</p>
+    <p>Status: ${data.work_order.status}</p>
+    <h4>Parts</h4>
+    <ul>${data.parts.map(p=>`<li>${p.name} x${p.quantity} @ ${p.unit_price}€</li>`).join('')}</ul>
+  `;
+}
+<section>
+<h2>Gestione Work Orders</h2>
+<label>WO ID <input id="statusWoId" type="number"></label>
+<label>Nuovo Status</label>
+<select id="newStatus">
+  <option value="open">Open</option>
+  <option value="in_progress">In Progress</option>
+  <option value="completed">Completed</option>
+  <option value="cancelled">Cancelled</option>
+</select>
+<button onclick="updateStatus()">Aggiorna Status</button>
+<button onclick="downloadPDF()">Scarica PDF</button>
+</section>
+async function updateStatus(){
+  const id = el('statusWoId').value;
+  const status = el('newStatus').value;
+  if(!id){alert("Inserisci WO ID"); return;}
+  const res = await fetch(`${API}/work_orders/${id}/status`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status})
+  });
+  const data = await res.json();
+  alert(data.message);
+  loadWO(id);
+}
+
+async function downloadPDF(){
+  const id = el('statusWoId').value;
+  if(!id){alert("Inserisci WO ID"); return;}
+  const res = await fetch(`${API}/work_orders/${id}/pdf`);
+  if(res.ok){
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `work_order_${id}.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } else {
+    alert("Errore nel download PDF");
+  }
+}
+<section>
+<h2>Dashboard KPI</h2>
+<button onclick="loadKPI()">Carica KPI</button>
+<div id="kpiSummary"></div>
+<div id="kpiCharts"></div>
+</section>
+async function loadKPI(){
+  const [summary, revenue, status] = await Promise.all([
+    fetch(`${API}/kpi/summary`).then(r=>r.json()),
+    fetch(`${API}/kpi/revenue_chart`).then(r=>r.json()),
+    fetch(`${API}/kpi/work_orders_status`).then(r=>r.json())
+  ]);
+  
+  el('kpiSummary').innerHTML = `
+    <h3>Riepilogo</h3>
+    <p>Totale veicoli: ${summary.total_vehicles}</p>
+    <p>Work orders completate: ${summary.completed_work_orders}</p>
+    <p>Ricavi totali: €${summary.total_revenue}</p>
+    <p>Work orders questo mese: ${summary.work_orders_this_month}</p>
+    <h4>DTC più comuni</h4>
+    <ul>${summary.common_dtc.map(d=>`<li>${d.code}: ${d.freq} volte</li>`).join('')}</ul>
+  `;
+  
+  el('kpiCharts').innerHTML = `
+    <h3>Ricavi ultimi 6 mesi</h3>
+    <table>
+      <tr><th>Mese</th><th>Ricavi (€)</th></tr>
+      ${revenue.map(r=>`<tr><td>${r.month}</td><td>${r.revenue}</td></tr>`).join('')}
+    </table>
+    <h3>Status Work Orders</h3>
+    <ul>${Object.entries(status).map(([s, c])=>`<li>${s}: ${c}</li>`).join('')}</ul>
+  `;
+}
+<section>
+<h2>Simulazione OBD-II</h2>
+<label>Vehicle ID <input id="obdVehicleId" type="number" value="1"></label>
+<button onclick="obdConnect()">Connetti OBD</button>
+<button onclick="obdReadDTC()">Leggi DTC</button>
+<button onclick="obdClearDTC()">Cancella DTC</button>
+<button onclick="obdDisconnect()">Disconnetti</button>
+<div id="obdStatus"></div>
+<div id="obdData"></div>
+</section>
+async function obdConnect(){
+  const id = el('obdVehicleId').value;
+  if(!id){alert("Inserisci vehicle ID"); return;}
+  el('obdStatus').innerText = "Connessione in corso...";
+  try {
+    const res = await fetch(`${API}/obd/connect/${id}`, {method: 'POST'});
+    const data = await res.json();
+    el('obdStatus').innerText = data.message;
+  } catch(e) {
+    el('obdStatus').innerText = "Errore connessione: " + e.message;
+  }
+}
+
+async function obdReadDTC(){
+  const id = el('obdVehicleId').value;
+  if(!id){alert("Inserisci vehicle ID"); return;}
+  el('obdData').innerText = "Lettura DTC...";
+  try {
+    const res = await fetch(`${API}/obd/${id}/read_dtc`);
+    const data = await res.json();
+    el('obdData').innerHTML = `
+      <h4>DTC Trovati</h4>
+      <ul>${data.dtc_codes.map(c=>`<li>${c}</li>`).join('')}</ul>
+      <h4>Dati Live</h4>
+      <ul>
+        <li>RPM: ${data.live_data.rpm}</li>
+        <li>Temperatura Raffreddamento: ${data.live_data.coolant_temp}°C</li>
+        <li>Tensione Batteria: ${data.live_data.battery_voltage}V</li>
+        <li>Livello Carburante: ${data.live_data.fuel_level}%</li>
+      </ul>
+    `;
+  } catch(e) {
+    el('obdData').innerText = "Errore lettura: " + e.message;
+  }
+}
+
+async function obdClearDTC(){
+  const id = el('obdVehicleId').value;
+  if(!id){alert("Inserisci vehicle ID"); return;}
+  try {
+    const res = await fetch(`${API}/obd/${id}/clear_dtc`, {method: 'POST'});
+    const data = await res.json();
+    el('obdStatus').innerText = data.message;
+  } catch(e) {
+    el('obdStatus').innerText = "Errore clear: " + e.message;
+  }
+}
+
+async function obdDisconnect(){
+  const id = el('obdVehicleId').value;
+  if(!id){alert("Inserisci vehicle ID"); return;}
+  try {
+    const res = await fetch(`${API}/obd/disconnect/${id}`, {method: 'POST'});
+    const data = await res.json();
+    el('obdStatus').innerText = data.message;
+  } catch(e) {
+    el('obdStatus').innerText = "Errore disconnessione: " + e.message;
+  }
+}
+<section>
+<h2>Configurazione Email</h2>
+<p>Per abilitare notifiche email, configura EMAIL_CONFIG in main.py con credenziali SMTP reali.</p>
+<p>Esempio Gmail: usa app password invece della password normale.</p>
+</section>
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+
+<section>
+<h2>Calendar Appuntamenti</h2>
+<div id='calendar'></div>
+<div id="eventModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border:1px solid #ccc;">
+  <h3 id="modalTitle">Nuovo Appuntamento</h3>
+  <label>Vehicle ID <input id="appVehicleId" type="number"></label><br>
+  <label>Titolo <input id="appTitle"></label><br>
+  <label>Descrizione <textarea id="appDesc"></textarea></label><br>
+  <label>Ora Inizio <input id="appStart" type="datetime-local"></label><br>
+  <label>Ora Fine <input id="appEnd" type="datetime-local"></label><br>
+  <button onclick="saveAppointment()">Salva</button>
+  <button onclick="closeModal()">Annulla</button>
+  <button id="deleteBtn" onclick="deleteAppointment()" style="display:none;">Elimina</button>
+</div>
+</section>
+let calendar;
+let currentEvent = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  const calendarEl = document.getElementById('calendar');
+  calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'timeGridWeek',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay'
+    },
+    events: loadEvents,
+    dateClick: handleDateClick,
+    eventClick: handleEventClick,
+    editable: true,
+    eventDrop: handleEventDrop
+  });
+  calendar.render();
+});
+
+async function loadEvents(info, successCallback, failureCallback) {
+  try {
+    const res = await fetch(`${API}/appointments?start=${info.startStr}&end=${info.endStr}`);
+    const events = await res.json();
+    successCallback(events.map(e => ({
+      id: e.id,
+      title: e.title,
+      start: e.start_time,
+      end: e.end_time,
+      extendedProps: { vehicle_id: e.vehicle_id, description: e.description }
+    })));
+  } catch(e) {
+    failureCallback(e);
+  }
+}
+
+function handleDateClick(info) {
+  currentEvent = null;
+  el('modalTitle').innerText = 'Nuovo Appuntamento';
+  el('appVehicleId').value = '';
+  el('appTitle').value = '';
+  el('appDesc').value = '';
+  el('appStart').value = info.dateStr;
+  el('appEnd').value = new Date(info.date.getTime() + 60*60*1000).toISOString().slice(0,16);
+  el('deleteBtn').style.display = 'none';
+  el('eventModal').style.display = 'block';
+}
+
+function handleEventClick(info) {
+  currentEvent = info.event;
+  el('modalTitle').innerText = 'Modifica Appuntamento';
+  el('appVehicleId').value = info.event.extendedProps.vehicle_id;
+  el('appTitle').value = info.event.title;
+  el('appDesc').value = info.event.extendedProps.description;
+  el('appStart').value = info.event.start.toISOString().slice(0,16);
+  el('appEnd').value = info.event.end.toISOString().slice(0,16);
+  el('deleteBtn').style.display = 'inline';
+  el('eventModal').style.display = 'block';
+}
+
+async function saveAppointment() {
+  const data = {
+    vehicle_id: parseInt(el('appVehicleId').value),
+    title: el('appTitle').value,
+    description: el('appDesc').value,
+    start_time: el('appStart').value,
+    end_time: el('appEnd').value
+  };
+  if (!data.vehicle_id || !data.title || !data.start_time || !data.end_time) {
+    alert("Compila tutti i campi obbligatori");
+    return;
+  }
+  
+  try {
+    if (currentEvent) {
+      await fetch(`${API}/appointments/${currentEvent.id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+    } else {
+      await fetch(`${API}/appointments`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+    }
+    calendar.refetchEvents();
+    closeModal();
+  } catch(e) {
+    alert("Errore salvataggio: " + e.message);
+  }
+}
+
+async function deleteAppointment() {
+  if (!currentEvent) return;
+  if (confirm("Eliminare appuntamento?")) {
+    try {
+      await fetch(`${API}/appointments/${currentEvent.id}`, {method: 'DELETE'});
+      calendar.refetchEvents();
+      closeModal();
+    } catch(e) {
+      alert("Errore eliminazione: " + e.message);
+    }
+  }
+}
+
+function handleEventDrop(info) {
+  fetch(`${API}/appointments/${info.event.id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      start_time: info.event.start.toISOString(),
+      end_time: info.event.end.toISOString()
+    })
+  });
+}
+
+function closeModal() {
+  el('eventModal').style.display = 'none';
+}

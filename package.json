@@ -1,0 +1,13 @@
+{
+  "name": "officina-ai-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Officina AI workshop management",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx serve .",
+    "build": "echo 'No build step required'"
+  },
+  "keywords": ["workshop", "management", "ai"],
+  "author": "",
+  "license": "MIT"
+}

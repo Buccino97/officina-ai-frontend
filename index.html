@@ -2272,13 +2272,11 @@ renderParts();
 renderMaint();
 renderManage();
 </script>
-</body>
-</html>
 
 <!-- Iniezione scripts Officina AI -->
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
 <script>
-const API='https://your-backend-url'; // aggiorna con il backend reale
+const API='http://localhost:8000'; // aggiorna con il backend reale (es: https://officina-ai-backend.vercel.app)
 function el(id){return document.getElementById(id);} 
 
 // Funzioni essenziali per diagnostica/workorder come gia costruite precedentemente
